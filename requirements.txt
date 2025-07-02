@@ -2,3 +2,5 @@ fastapi
 uvicorn
 beautifulsoup4
 requests
+httpx
+extruct         # (for schema detection later – keeps future work easy)
