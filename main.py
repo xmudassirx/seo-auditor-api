@@ -121,3 +121,25 @@ def web_vitals(body: WebVitalsBody):
     if not api_key:
         raise HTTPException(status_code=400, detail="PSI_API_KEY env var not set")
     return call_psi(body.url, api_key)
+
+
+
+
+from helpers_schema import extract_schema
+
+# ---------- /schema-audit ----------
+class SchemaBody(BaseModel):
+    url: str
+
+@app.post("/schema-audit")
+def schema_audit(body: SchemaBody):
+    """
+    Returns structured-data objects (JSON-LD & Microdata) found on the page.
+    """
+    try:
+        return extract_schema(body.url)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+
