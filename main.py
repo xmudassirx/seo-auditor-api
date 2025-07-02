@@ -79,6 +79,32 @@ def analyze_seo(body: AnalyzeBody):
 from helpers import fetch_robots_txt, parse_robots, call_psi
 import os, urllib.parse
 
+from pydantic import BaseModel
+import requests
+
+# ---------- /analyze-seo-url ----------
+class AnalyzeURLBody(BaseModel):
+    url: str
+    primary_keyword: str
+
+@app.post("/analyze-seo-url")
+def analyze_seo_url(body: AnalyzeURLBody):
+    """
+    One-step audit: fetch page internally, then run the same BeautifulSoup checks.
+    Keeps payload tiny so ChatGPT never sees full HTML.
+    """
+    html = requests.get(
+        body.url,
+        timeout=10,
+        headers={"User-Agent": "SEO-Auditor-Bot"}
+    ).text
+    return analyze_seo(AnalyzeBody(
+        html=html,
+        url=body.url,
+        primary_keyword=body.primary_keyword
+    ))
+
+
 # ---------- /robots-check ----------
 @app.get("/robots-check")
 def robots_check(url: str):
