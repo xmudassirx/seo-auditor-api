@@ -73,7 +73,7 @@ def analyze_seo(body: AnalyzeBody):
                 "total": len(soup.find_all("img")),
                 "missing_alt": sum(1 for img in soup.find_all("img") if not img.get("alt"))
             },
-            "url_contains_kw": pk in body.url.lower()
+            "url_contains_kw": normalize(pk) in normalize(body.url)
         }
         return report
 
