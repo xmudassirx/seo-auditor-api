@@ -1,23 +1,29 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from bs4 import BeautifulSoup
-import requests, re, urllib.parse
+import requests, re, urllib.parse, os
 
 app = FastAPI()
 
-# ---------- helper ----------
+# ---------- helpers ----------
 def short_domain(url: str) -> str:
     """Return domain.tld (very light, no external cache needed)."""
     host = urllib.parse.urlparse(url).hostname or ""
-    host = re.sub(r"^(www|m|web)\.", "", host)   # strip common subdomains
+    host = re.sub(r"^(www|m|web)\.", "", host)
     parts = host.split(".")
     return ".".join(parts[-2:]) if len(parts) >= 2 else host
 
-# ---------- /fetch-page ----------
+def normalize(text: str) -> str:
+    """Lower-case and strip everything except a–z and 0–9."""
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+# ---------- /fetch-page (still handy for debugging) ----------
 @app.get("/fetch-page")
 def fetch_page(url: str):
     try:
-        r = requests.get(url, timeout=10, headers={"User-Agent": "SEO-Auditor-Bot"})
+        r = requests.get(url, timeout=10, headers={
+            "User-Agent": "Mozilla/5.0 (SEO-Auditor)"
+        })
         r.raise_for_status()
         return r.text
     except Exception as e:
@@ -35,19 +41,13 @@ def analyze_seo(body: AnalyzeBody):
         soup = BeautifulSoup(body.html, "html.parser")
         pk = body.primary_keyword.lower()
 
-        # --- basic elements ---
+        # basic elements
         title = soup.title.string.strip() if soup.title and soup.title.string else ""
         meta_tag = soup.find("meta", attrs={"name": "description"})
         meta_desc = meta_tag.get("content", "").strip() if meta_tag else ""
-
         h1s = [h.get_text(" ", strip=True) for h in soup.find_all("h1")]
         text = soup.get_text(" ", strip=True)
 
-        def normalize(text: str) -> str:
-    # lower-case and strip every character that isn't a–z or 0-9
-    return re.sub(r"[^a-z0-9]", "", text.lower())
-
-        
         report = {
             "title": {
                 "present": bool(title),
@@ -81,11 +81,8 @@ def analyze_seo(body: AnalyzeBody):
         print("analyze_seo error:", e)
         raise HTTPException(status_code=400, detail=str(e))
 
+# ---------- imports from helpers ----------
 from helpers import fetch_robots_txt, parse_robots, call_psi
-import os, urllib.parse
-
-from pydantic import BaseModel
-import requests
 
 # ---------- /analyze-seo-url ----------
 class AnalyzeURLBody(BaseModel):
@@ -94,14 +91,11 @@ class AnalyzeURLBody(BaseModel):
 
 @app.post("/analyze-seo-url")
 def analyze_seo_url(body: AnalyzeURLBody):
-    """
-    One-step audit: fetch page internally, then run the same BeautifulSoup checks.
-    Keeps payload tiny so ChatGPT never sees full HTML.
-    """
+    """Fetch the page internally, then run the same BeautifulSoup checks."""
     html = requests.get(
         body.url,
         timeout=10,
-        headers={"User-Agent": "SEO-Auditor-Bot"}
+        headers={"User-Agent": "Mozilla/5.0 (SEO-Auditor)"}
     ).text
     return analyze_seo(AnalyzeBody(
         html=html,
@@ -109,18 +103,13 @@ def analyze_seo_url(body: AnalyzeURLBody):
         primary_keyword=body.primary_keyword
     ))
 
-
 # ---------- /robots-check ----------
 @app.get("/robots-check")
 def robots_check(url: str):
-    """
-    Returns whether the audited URL is blocked by robots.txt
-    """
     domain = "{uri.scheme}://{uri.netloc}".format(uri=urllib.parse.urlparse(url))
     robots_txt = fetch_robots_txt(domain)
     result = parse_robots(robots_txt, urllib.parse.urlparse(url).path)
     return {"robots_txt_present": True, **result}
-
 
 # ---------- /web-vitals ----------
 class WebVitalsBody(BaseModel):
@@ -132,4 +121,3 @@ def web_vitals(body: WebVitalsBody):
     if not api_key:
         raise HTTPException(status_code=400, detail="PSI_API_KEY env var not set")
     return call_psi(body.url, api_key)
-
