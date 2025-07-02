@@ -75,3 +75,30 @@ def analyze_seo(body: AnalyzeBody):
     except Exception as e:
         print("analyze_seo error:", e)
         raise HTTPException(status_code=400, detail=str(e))
+
+from helpers import fetch_robots_txt, parse_robots, call_psi
+import os, urllib.parse
+
+# ---------- /robots-check ----------
+@app.get("/robots-check")
+def robots_check(url: str):
+    """
+    Returns whether the audited URL is blocked by robots.txt
+    """
+    domain = "{uri.scheme}://{uri.netloc}".format(uri=urllib.parse.urlparse(url))
+    robots_txt = fetch_robots_txt(domain)
+    result = parse_robots(robots_txt, urllib.parse.urlparse(url).path)
+    return {"robots_txt_present": True, **result}
+
+
+# ---------- /web-vitals ----------
+class WebVitalsBody(BaseModel):
+    url: str
+
+@app.post("/web-vitals")
+def web_vitals(body: WebVitalsBody):
+    api_key = os.getenv("PSI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="PSI_API_KEY env var not set")
+    return call_psi(body.url, api_key)
+
