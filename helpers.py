@@ -28,24 +28,35 @@ def parse_robots(robots_text: str, target_path: str) -> dict:
     return {"blocked": blocked, "rules": rules}
 
 # ---- Core Web Vitals via PageSpeed Insights ----
+
 PSI_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
 
-def call_psi(url: str, api_key: str, strategy="mobile") -> dict:
-    params = {
-        "url": url,
-        "key": api_key,
-        "strategy": strategy,
-        "category": "performance"
-    }
-    r = httpx.get(PSI_ENDPOINT, params=params, timeout=30)
-    if r.status_code != 200:
-        raise HTTPException(status_code=400, detail=f"PSI error {r.status_code}: {r.text[:120]}")
-    data = r.json()
-    audits = data["lighthouseResult"]["audits"]
-    metrics = audits["metrics"]["details"]["items"][0]
-    return {
-        "lcp_ms": metrics["largestContentfulPaint"],
-        "cls": audits["cumulative-layout-shift"]["displayValue"],
-        "inp_ms": metrics.get("experimental_interaction_to_next_paint", None),
-        "score": data["lighthouseResult"]["categories"]["performance"]["score"]
-    }
+def call_psi(url: str, api_key: str) -> dict:
+    """
+    Tries mobile first; if PageSpeed blocks or lacks data, retries desktop.
+    Returns the metrics for whichever strategy succeeds.
+    """
+    for strat in ("mobile", "desktop"):
+        params = {
+            "url": url,
+            "key": api_key,
+            "strategy": strat,
+            "category": "performance"
+        }
+        r = httpx.get(PSI_ENDPOINT, params=params, timeout=30)
+        if r.status_code == 200:
+            data = r.json()
+            audits = data["lighthouseResult"]["audits"]
+            metrics = audits["metrics"]["details"]["items"][0]
+            return {
+                "strategy": strat,                         # so the GPT can mention which one succeeded
+                "lcp_ms": metrics["largestContentfulPaint"],
+                "cls": audits["cumulative-layout-shift"]["displayValue"],
+                "inp_ms": metrics.get("experimental_interaction_to_next_paint"),
+                "score": data["lighthouseResult"]["categories"]["performance"]["score"]
+            }
+
+    # If both attempts failed:
+    raise HTTPException(status_code=400, detail="PSI failed on mobile and desktop")
+
+
