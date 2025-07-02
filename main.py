@@ -43,6 +43,11 @@ def analyze_seo(body: AnalyzeBody):
         h1s = [h.get_text(" ", strip=True) for h in soup.find_all("h1")]
         text = soup.get_text(" ", strip=True)
 
+        def normalize(text: str) -> str:
+    # lower-case and strip every character that isn't a–z or 0-9
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+        
         report = {
             "title": {
                 "present": bool(title),
